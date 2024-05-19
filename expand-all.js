@@ -1,15 +1,15 @@
-let todo = 6;
+Functions = {};
+Functions.EXPAND_POST     =  1; // not used any more
+Functions.EXPAND_COMMENTS =  2;
+Functions.EXPAND_REPLIES  =  4;
+Functions.EXPAND_XLAT     =  8; // not used any more
+Functions.EXPAND_FILTER   = 16;
 
-const EXPAND_POST = 1; // not used anymore
-const EXPAND_COMMENTS = 2;
-const EXPAND_REPLIES = 4;
-const EXPAND_XLAT = 8; // not used anymore
-const EXPAND_FILTER = 16;
+let todo = Functions.EXPAND_COMMENTS | Functions.EXPAND_REPLIES;
 
-const WAIT_TIME = 100; // in ms
-const MAX_WAIT = 20; // in iterations
-const END_DELAY = 3.0; // in seconds
-
+const WAIT_TIME = 100;  // in ms
+const MAX_WAIT = 20;    // in iterations
+const END_DELAY = 3.0;  // in seconds
 const POST_ARTICLE = "[class=\"x1a2a7pz\"][role=\"article\"]";
 const FS_ARTICLE = "[role=\"complementary\"]";
 const ANY_ARTICLE = POST_ARTICLE + "," + FS_ARTICLE;
@@ -41,6 +41,7 @@ const CSS_LOGIN_STUFF = "._5hn6,[data-nosnippet]";
 const SM_COMMENT = "[dir=\"auto\"] [role=\"button\"]";
 const SEE_MORE_COMMENT = RESPONSE_COUNTER + " " + SM_COMMENT;
 
+const EXPAND_COMMENT = ".xmgb6t1";
 const SM_BASE = "div.x1s688f.xt0b8zv";
 const SEE_MORE_BASE = POST_ARTICLE + " " + SM_BASE + "," + FS_ARTICLE + " " + SM_BASE;
 
@@ -169,7 +170,7 @@ class CfgHandler
 
   docKeyDown(e)
   {
-    if (e.keyCode === "S".charCodeAt(0))
+    if (e.keyCode === 83) // "S" character code
     {
       e.preventDefault();
 
@@ -196,16 +197,17 @@ class Settings
 {
   static hasValue(value)
   {
-    return window.localStorage.getItem(value) !== null;
+    return this.getValue(value, null) !== null;
   }
 
   static getValue(value, deflt)
   {
     if (arguments.length < 2)
       deflt = null;
-    if (!Settings.hasValue(value))
-      return deflt;
-    return window.localStorage.getItem(value);
+
+    value = window.localStorage.getItem(value);
+
+    return value ? value : deflt;
   }
 
   static getInt(value, deflt)
@@ -257,12 +259,10 @@ class BaseWindow
     const h = sizer.clientHeight;
 
     let x = 0;
+    let y = 0;
 
     if (w > WANT_W)
       x = (w - WANT_W) / 2;
-
-    let y = 0;
-
     if (h > WANT_H)
       y = (h - WANT_H) / 3;
 
@@ -326,9 +326,9 @@ class CfgWindow extends BaseWindow
 
     const boxes=
       [
-        ["Expand comments.",                        EXPAND_COMMENTS],
-        ["Expand replies.",                         EXPAND_REPLIES],
-        ["Don't force <i>All comments</i> filter.", EXPAND_FILTER]
+        ["Expand comments.",                        Functions.EXPAND_COMMENTS],
+        ["Expand replies.",                         Functions.EXPAND_REPLIES],
+        ["Don't force <i>All comments</i> filter.", Functions.EXPAND_FILTER]
       ];
 
     boxes.forEach(
@@ -402,9 +402,9 @@ class CfgWindow extends BaseWindow
 
     if (boxes.length === 3)
     {
-      boxes[0].checked = (todo & EXPAND_COMMENTS) != 0;
-      boxes[1].checked = (todo & EXPAND_REPLIES) != 0;
-      boxes[2].checked = (todo & EXPAND_FILTER) != 0;
+      boxes[0].checked = (todo & Functions.EXPAND_COMMENTS) != 0;
+      boxes[1].checked = (todo & Functions.EXPAND_REPLIES) != 0;
+      boxes[2].checked = (todo & Functions.EXPAND_FILTER) != 0;
     }
   }
 
@@ -527,7 +527,7 @@ class Root
 
     if (!!divv)
     {
-      let canPost = !!document.querySelector(POST_ACTION);;
+      let canPost = !!document.querySelector(POST_ACTION);
       let topOnly = !canPost;
 
       if (topOnly)
@@ -1045,7 +1045,7 @@ function pumpOnce(onDone)
   window.responseCount = Global.root.getResponseCount();
   window.doPhantomCheck = true;
 
-  if ((todo & EXPAND_COMMENTS) != 0)
+  if ((todo & Functions.EXPAND_COMMENTS) != 0)
     getCommentsOrReplies(true, () => pumpOnce2(onDone));
   else
     pumpOnce2(onDone);
@@ -1053,7 +1053,7 @@ function pumpOnce(onDone)
 
 function pumpOnce2(onDone)
 {
-  if ((todo & EXPAND_REPLIES) != 0)
+  if ((todo & Functions.EXPAND_REPLIES) != 0)
     getCommentsOrReplies(false, () => pumpOnce3(onDone));
   else
     pumpOnce3(onDone);
@@ -1216,26 +1216,52 @@ class Actions
     this.actions = [];
     this.actions.push(onDone => ensureCommentsShowing(onDone));
 
-    if ((todo & EXPAND_FILTER) == 0)
+    if ((todo & Functions.EXPAND_FILTER) == 0)
       this.actions.push(onDone => setFilter(onDone));
 
     // see special case(s) in clickClass()
     this.actions.push(onDone => clickClass(SEE_MORE_BASE, onDone));
 
-    function seeMore(o)
-    {
-      // see special case(s) in clickClass()
-      o.actions.push(onDone => clickClass(SEE_MORE_COMMENT, onDone));
-    }
-
-    seeMore(this);
+    // see special case(s) in clickClass()
+    this.actions.push(onDone => clickClass(SEE_MORE_COMMENT, onDone));
 
     this.actions.push(onDone => pumpOnce(onDone));
 
-    seeMore(this);
+    this.actions.push(onDone => this.setUpMoreActions());
+  }
 
-    this.actions.push(Session.endSession);
-    this.actions.push(null);
+  setUpMoreActions()
+  {
+    var moreActions = false;
+
+    if (Global.root.queryAll(SEE_MORE_COMMENT).length > 0)
+    {
+      // see special case(s) in clickClass()
+      this.actions.push(onDone => clickClass(SEE_MORE_COMMENT,onDone));
+      moreActions = true;
+    }
+
+    if (Global.root.queryAll(EXPAND_COMMENT).length > 0)
+    {
+      // see special case(s) in clickClass()
+      this.actions.push(onDone => clickClass(EXPAND_COMMENT,onDone));
+      moreActions = true;
+    }
+
+    if (moreActions)
+    {
+      Global.log("found more work to do!");
+      this.actions.push(onDone => this.setUpMoreActions());
+    }
+    else
+    {
+      this.actions.push(Session.endSession);
+      this.actions.push(null);
+    }
+
+    this.i++;
+
+    this.doAction();
   }
 
   doAction()
