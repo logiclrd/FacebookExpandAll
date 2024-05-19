@@ -50,1099 +50,1307 @@ const _REPLIES = "-replies";
 
 const SETTINGS_KEY = "expand-all-todo";
 
-function bind(obj, fn) {
-    return function() { fn.apply(obj, arguments); };
+function bind(obj, fn)
+{
+  return (
+    function()
+    {
+      fn.apply(obj, arguments);
+    });
 }
 
 let Global = null;
 
 // forEach polyfill
-if (!document.querySelectorAll("xx").forEach) {
-    Object.prototype.forEach = function(callback) {
-        let T;
-        if (arguments.length > 1) {
-            T = arguments[1];
-        }
+if (!document.querySelectorAll("xx").forEach)
+{
+  Object.prototype.forEach =
+    function(callback)
+    {
+      let T;
+      if (arguments.length > 1)
+        T = arguments[1];
 
-        let O = Object(this);
-        let len = O.length >>> 0;
+      let O = Object(this);
+      let len = O.length >>> 0;
 
-        let k = 0;
-        while (k < len) {
-            if (k in O) {
-                callback.call(T, O[k], k, O);
-            }
+      let k = 0;
+      while (k < len)
+      {
+        if (k in O)
+          callback.call(T, O[k], k, O);
 
-            k++;
-        }
+        k++;
+      }
     };
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // EscHandler
+//
+//   Input handler to support signalling abort by pressing Escape.
+class EscHandler
+{
+  constructor()
+  {
+    this.abortNow = false;
+    this.handler = bind(this, this.docKeyDown);
+  }
 
-class EscHandler {
-    constructor() {
-        this.abortNow = false;
-        this.handler = bind(this, this.docKeyDown);
+  shouldAbort()
+  {
+    return this.abortNow;
+  }
+
+  abort(value)
+  {
+    if (value
+     && !this.shouldAbort()
+     && !Global.cfg)
+      Global.log("Aborting...");
+
+    this.abortNow = value;
+  }
+
+  on()
+  {
+    this.abortNow = false;
+    document.addEventListener("keydown", this.handler);
+  }
+
+  off()
+  {
+    this.abortNow = true;
+    document.removeEventListener("keydown", this.handler);
+  }
+
+  docKeyDown(e)
+  {
+    if (e.keyCode == 27)
+    {
+      e.preventDefault();
+
+      this.abort(true);
+
+      if (Global.cfg)
+        Session.trulyEnd();
     }
-
-    shouldAbort() {
-        return this.abortNow;
-     }
-
-    abort(value) {
-        if (value && !this.shouldAbort() && !Global.cfg) {
-            Global.log("Aborting...");
-        }
-
-        this.abortNow = value;
-    }
-
-    on() {
-        this.abortNow = false;
-        document.addEventListener("keydown", this.handler);
-    }
-
-    off() {
-        this.abortNow = true;
-        document.removeEventListener("keydown", this.handler);
-    }
-
-    docKeyDown(e) {
-        if (e.keyCode == 27) {
-            e.preventDefault();
-            this.abort(true);
-            if (Global.cfg) {
-                Session.trulyEnd();
-            }
-        }
-    }
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // CfgHandler
+//
+//   Input handler to allow the user to invoke the configuration screen by pressing S.
+class CfgHandler
+{
+  constructor()
+  {
+    this.doConfig = false;
+    this.handler = bind(this, this.docKeyDown);
+  }
 
-class CfgHandler {
-    constructor() {
-        this.doConfig = false;
-        this.handler = bind(this, this.docKeyDown);
+  shouldConfig()
+  {
+    return this.doConfig;
+  }
+
+  on()
+  {
+    this.doConfig = false;
+    document.addEventListener("keydown", this.handler);
+  }
+
+  off()
+  {
+    this.doConfig = true;
+    document.removeEventListener("keydown", this.handler);
+  }
+
+  docKeyDown(e)
+  {
+    if (e.keyCode === "S".charCodeAt(0))
+    {
+      e.preventDefault();
+
+      if (e.ctrlKey)
+      {
+        Settings.removeKey(SETTINGS_KEY);
+        Global.log("Will use default settings");
+        return;
+      }
+
+      this.doConfig = true;
+
+      if (Global.ending)
+        CfgWindow.showIt();
     }
-
-    shouldConfig() {
-        return this.doConfig;
-    }
-
-    on() {
-        this.doConfig = false;
-        document.addEventListener("keydown", this.handler);
-    }
-
-    off() {
-        this.doConfig = true;
-        document.removeEventListener("keydown", this.handler);
-    }
-
-    docKeyDown(e) {
-        if (e.keyCode === "S".charCodeAt(0)) {
-            e.preventDefault();
-            if (e.ctrlKey) {
-                Settings.removeKey(SETTINGS_KEY);
-                Global.log("Will use default settings");
-                return;
-            }
-
-            this.doConfig = true;
-            if (Global.ending) {
-                CfgWindow.showIt();
-            }
-        }
-    }
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////
 // Settings
+//
+//   Interface to setting storage.
+class Settings
+{
+  static hasValue(value)
+  {
+    return window.localStorage.getItem(value) !== null;
+  }
 
-class Settings {
-    static hasValue(value) {
-       return window.localStorage.getItem(value) !== null;
-    }
+  static getValue(value, deflt)
+  {
+    if (arguments.length < 2)
+      deflt = null;
+    if (!Settings.hasValue(value))
+      return deflt;
+    return window.localStorage.getItem(value);
+  }
 
-    static getValue(value, deflt) {
-       if (arguments.length < 2) {
-           deflt = null;
-       }
+  static getInt(value, deflt)
+  {
+    if (arguments.length < 2)
+      deflt = -1;
 
-       if (!Settings.hasValue(value)) {
-           return deflt;
-       }
+    return Number.parseInt(Settings.getValue(value, deflt), 10);
+  }
 
-       return window.localStorage.getItem(value);
-    }
+  static getBoolean(value, deflt)
+  {
+    if (arguments.length < 2)
+      deflt = "false";
 
-    static getInt(value, deflt) {
-       if (arguments.length < 2) {
-           deflt = -1;
-       }
+    return Settings.getValue(value, "" + deflt) == "true";
+  }
 
-       return Number.parseInt(Settings.getValue(value, deflt), 10);
-    }
+  static setValue(key, value)
+  {
+    return window.localStorage.setItem(key, "" + value);
+  }
 
-    static getBoolean(value, deflt) {
-       if (arguments.length < 2) {
-           deflt = "false";
-       }
-
-       return Settings.getValue(value, "" + deflt) == "true";
-    }
-
-    static setValue(key, value) {
-       return window.localStorage.setItem(key, "" + value);
-    }
-
-    static removeKey(key) {
-       return window.localStorage.removeItem(key);
-    }
+  static removeKey(key)
+  {
+    return window.localStorage.removeItem(key);
+  }
 }
 
-///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
 // BaseWindow
+//
+//   Abstract base class for overlaid popup windows.
+class BaseWindow
+{
+  constructor()
+  {
+    this.id = "base-window";
+  }
 
-class BaseWindow {
-    constructor() {
-        this.id = "base-window";
-    }
+  show()
+  {
+    const WANT_W = 300;
+    const WANT_H = 200;
 
-    show() {
-        const WANT_W = 300;
-        const WANT_H = 200;
+    const sizer = document.querySelector("html");
 
-        const sizer = document.querySelector("html");
-        const w = sizer.clientWidth;
-        const h = sizer.clientHeight;
+    const w = sizer.clientWidth;
+    const h = sizer.clientHeight;
 
-        let x = 0;
-        if (w > WANT_W) {
-            x = (w - WANT_W) / 2;
-        }
+    let x = 0;
 
-        let y = 0;
-        if (h > WANT_H) {
-            y = (h - WANT_H) / 3;
-        }
+    if (w > WANT_W)
+      x = (w - WANT_W) / 2;
 
-        let div = document.createElement("div");
-        div.id = this.id;
-        div.style.direction = "ltr";
-        div.style.position = "fixed";
-        div.style.zIndex = "999999";
-        div.style.left = x + "px";
-        div.style.width = WANT_W + "px";
-        div.style.top = y + "px";
-        div.style.height = WANT_H + "px";
-        div.style.color = "#fff";
-        div.style.backgroundColor = "#425f9c";
+    let y = 0;
 
-        document.body.insertAdjacentElement("afterbegin", div);
+    if (h > WANT_H)
+      y = (h - WANT_H) / 3;
 
-        this.create(div);
-        this.init(div);
-    }
+    let div = document.createElement("div");
 
-    create(div) { }
-    init(div) { }
+    div.id = this.id;
 
-    hide() {
-        document.querySelectorAll("#" + this.id).forEach(item => document.body.removeChild(item));
-    }
+    div.style.direction = "ltr";
+    div.style.position = "fixed";
+    div.style.zIndex = "999999";
+    div.style.left = x + "px";
+    div.style.width = WANT_W + "px";
+    div.style.top = y + "px";
+    div.style.height = WANT_H + "px";
+    div.style.color = "#fff";
+    div.style.backgroundColor = "#425f9c";
+
+    document.body.insertAdjacentElement("afterbegin", div);
+
+    this.create(div);
+    this.init(div);
+  }
+
+  create(div)
+  {
+  }
+
+  init(div)
+  {
+  }
+
+  hide()
+  {
+    document
+      .querySelectorAll("#" + this.id)
+      .forEach(item => document.body.removeChild(item));
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // CfgWindow
+//
+//   Configuration Window
+class CfgWindow extends BaseWindow
+{
+  constructor()
+  {
+    super();
+    this.id = "cfg-window";
+  }
 
-class CfgWindow extends BaseWindow {
-    constructor() {
-        super();
-        this.id = "cfg-window";
-    }
+  create(div)
+  {
+    let node = document.createElement("p");
 
-    create(div) {
-        let node = document.createElement("p");
+    div.appendChild(node);
+
+    node.innerHTML = "<i>Expand All</i> Settings";
+    node.style.marginLeft = "4px";
+    node.style.fontWeight = "bold";
+
+    const boxes=
+      [
+        ["Expand comments.",                        EXPAND_COMMENTS],
+        ["Expand replies.",                         EXPAND_REPLIES],
+        ["Don't force <i>All comments</i> filter.", EXPAND_FILTER]
+      ];
+
+    boxes.forEach(
+      item =>
+      {
+        node = document.createElement("p");
+
         div.appendChild(node);
-        node.innerHTML = "<i>Expand All</i> Settings";
-        node.style.marginLeft = "4px";
-        node.style.fontWeight = "bold";
 
-        const boxes = [
-            ["Expand comments.", EXPAND_COMMENTS],
-            ["Expand replies.", EXPAND_REPLIES],
-            ["Don&apos;t force <i>All comments</i> filter.", EXPAND_FILTER]
-        ];
+        node.style.marginTop = "2px";
+        node.style.marginBottom = "2px";
 
-        boxes.forEach(item => {
-            node = document.createElement("p");
-            div.appendChild(node);
-            node.style.marginTop = "2px";
-            node.style.marginBottom = "2px";
+        let node2 = document.createElement("input");
 
-            let node2 = document.createElement("input");
-            node.appendChild(node2);
-            node2.type = "checkbox";
-            node2.value = item[1];
-            node2.style.marginLeft = "15px";
-            node2.style.cursor = "pointer";
-
-            node2 = document.createElement("label");
-            node.appendChild(node2);
-            node2.innerHTML = item[0];
-            node2.style.cursor = "pointer";
-            node2.style.paddingBottom = "5px";
-            node2.style.fontWeight = "normal";
-            node2.style.color = "#fff";
-        });
-
-        node = document.createElement("div");
-        div.appendChild(node);
-        node.style.textAlign = "center";
-
-        let node2 = document.createElement("button");
         node.appendChild(node2);
-        node2.innerHTML = "Done";
+
+        node2.type = "checkbox";
+        node2.value = item[1];
+        node2.style.marginLeft = "15px";
         node2.style.cursor = "pointer";
-        node2.addEventListener("click", Session.trulyEnd);
 
-        div.addEventListener("CheckboxStateChange", CfgWindow.check);
-        div.addEventListener("click", CfgWindow.check);
+        node2 = document.createElement("label");
+
+        node.appendChild(node2);
+
+        node2.innerHTML = item[0];
+        node2.style.cursor = "pointer";
+        node2.style.paddingBottom = "5px";
+        node2.style.fontWeight = "normal";
+        node2.style.color = "#fff";
+      });
+
+    node = document.createElement("div");
+
+    div.appendChild(node);
+
+    node.style.textAlign = "center";
+
+    let node2 = document.createElement("button");
+
+    node.appendChild(node2);
+
+    node2.innerHTML = "Done";
+    node2.style.cursor = "pointer";
+    node2.addEventListener("click", Session.trulyEnd);
+
+    div.addEventListener("CheckboxStateChange", CfgWindow.check);
+    div.addEventListener("click", CfgWindow.check);
+  }
+
+  static check(e)
+  {
+    let node = Dom.upThenDown(e.target, "p", "input");
+
+    if (!!node && node != e.target)
+    {
+      node.checked = !node.checked;
+
+      if (node.checked)
+        todo |= Number.parseInt(node.value);
+      else
+        todo &= ~Number.parseInt(node.value);
+
+      Settings.setValue(SETTINGS_KEY, todo);
     }
+  }
 
-    static check(e) {
-        let node = Dom.upThenDown(e.target, "p", "input");
-        if (!!node && node != e.target) {
-            node.checked = !node.checked;
+  init(div)
+  {
+    let boxes = div.querySelectorAll("input");
 
-            if (node.checked) {
-                todo |= Number.parseInt(node.value);
-            } else {
-                todo &= ~Number.parseInt(node.value);
-            }
-
-            Settings.setValue(SETTINGS_KEY, todo);
-        }
+    if (boxes.length === 3)
+    {
+      boxes[0].checked = (todo & EXPAND_COMMENTS) != 0;
+      boxes[1].checked = (todo & EXPAND_REPLIES) != 0;
+      boxes[2].checked = (todo & EXPAND_FILTER) != 0;
     }
+  }
 
-    init(div) {
-        let boxes = div.querySelectorAll("input");
-        if (boxes.length === 3) {
-            boxes[0].checked = (todo & EXPAND_COMMENTS) != 0;
-            boxes[1].checked = (todo & EXPAND_REPLIES) != 0;
-            boxes[2].checked = (todo & EXPAND_FILTER) != 0;
-        }
-    }
-
-    static showIt() {
-        Global.logger.hide();
-        Global.cfg = new CfgWindow();
-        Global.cfg.show();
-    }
+  static showIt()
+  {
+    Global.logger.hide();
+    Global.cfg = new CfgWindow();
+    Global.cfg.show();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // LogWindow
+//
+//   Main user interface during expand-all operation.
+class LogWindow extends BaseWindow
+{
+  constructor()
+  {
+    super();
 
-class LogWindow extends BaseWindow {
-    constructor() {
-        super();
-        this.id = "log-window";
-        this.timeouts = 0;
-        this.phantoms = 0;
-        this.edit = null;
-     }
+    this.id = "log-window";
+    this.timeouts = 0;
+    this.phantoms = 0;
+    this.edit = null;
+  }
 
-    create(div) {
-        this.edit = document.createElement("textarea");
-        this.edit.style.width = "100%";
-        this.edit.style.height = "100%";
-        this.edit.style.color = "#fff";
-        this.edit.style.backgroundColor = "#425f9c";
+  create(div)
+  {
+    this.edit = document.createElement("textarea");
+    this.edit.style.width = "100%";
+    this.edit.style.height = "100%";
+    this.edit.style.color = "#fff";
+    this.edit.style.backgroundColor = "#425f9c";
 
-        div.appendChild(this.edit);
+    div.appendChild(this.edit);
+  }
+
+  hide()
+  {
+    BaseWindow.prototype.hide.call(this);
+    this.edit = null;
+  }
+
+  log(s)
+  {
+    console.log(s);
+
+    if (this.edit)
+      this.edit.value = s + "\n" + this.edit.value;
+  }
+
+  timeout()
+  {
+    this.timeouts++;
+  }
+
+  phantom()
+  {
+    this.phantoms++;
+  }
+
+  counts()
+  {
+    if (this.timeouts > 0)
+    {
+      this.log(this.timeouts + " timeout(s)");
     }
 
-    hide() {
-        BaseWindow.prototype.hide.call(this);
-        this.edit = null;
+    if (this.phantoms > 0)
+    {
     }
 
-    log(s) {
-        console.log(s);
-        if (this.edit) {
-            this.edit.value = s + "\n" + this.edit.value;
-        }
-    }
-
-    timeout() {
-        this.timeouts++;
-    }
-
-    phantom() {
-        this.phantoms++;
-    }
-
-    counts() {
-        if (this.timeouts > 0) {
-            this.log(this.timeouts + " timeout(s)");
-        }
-
-        if (this.phantoms > 0) {
-//          this.log(this.phantoms + " phantom(s)");
-        }
-
-        this.log("Responses showing = " + Global.root.queryAll(RESPONSE_COUNTER).length);
-    }
+    this.log("Responses showing = " + Global.root.queryAll(RESPONSE_COUNTER).length);
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Root
+//
+//   Starting point for the browser document state.
+class Root
+{
+  constructor()
+  {
+    this.rootNode = document.body;
+  }
 
-class Root {
-    constructor() {
-        this.rootNode = document.body;
+  static removeOverlay()
+  {
+    document.querySelectorAll(CSS_LOGIN_STUFF).forEach(
+      item=>
+      {
+        Global.log("Removing overlay stuff");
+        item.parentNode.removeChild(item);
+      });
+  }
+
+  query(s)
+  {
+    return this.rootNode.querySelector(s);
+  }
+
+  queryAll(s)
+  {
+    return this.rootNode.querySelectorAll(s);
+  }
+
+  determine()
+  {
+    if (Dom.filterHidden(document.querySelectorAll(VIDEO_FEED)).length === 1)
+    {
+      Global.log("Video feed; please drill down to one video (click the time stamp).");
+      return false;
     }
 
-    static removeOverlay() {
-        document.querySelectorAll(CSS_LOGIN_STUFF).forEach(item => {
-            Global.log("Removing overlay stuff");
-            item.parentNode.removeChild(item);
-        });
-    }
+    const EXPANDING = "Expanding: ";
 
-    query(s) {
-        return this.rootNode.querySelector(s);
-    }
+    const divv = Dom.findFirstVisible(document.querySelectorAll(POST_ARTICLE));
 
-    queryAll(s) {
-        return this.rootNode.querySelectorAll(s);
-    }
+    if (!!divv)
+    {
+      let canPost = !!document.querySelector(POST_ACTION);;
+      let topOnly = !canPost;
 
-    determine() {
-        if (Dom.filterHidden(document.querySelectorAll(VIDEO_FEED)).length === 1) {
-            Global.log("Video feed; please drill down to one video (click the time stamp).");
-            return false;
-        }
+      if (topOnly)
+        topOnly = Dom.roles("contentinfo") == 0;
+      else
+        topOnly = Dom.roles("feed") == 2 && Dom.roles("grid") == 1 && Dom.roles("contentinfo") == 0;
 
-        const EXPANDING = "Expanding: ";
-
-        const divv = Dom.findFirstVisible(document.querySelectorAll(POST_ARTICLE));
-        if (!!divv) {
-            let canPost = !!document.querySelector(POST_ACTION);;
-            let topOnly = !canPost;
-
-            if (topOnly) {
-                // PinkNews has no post ability; want topmost
-                topOnly = Dom.roles("contentinfo") == 0;
-            } else {
-                // https://www.facebook.com/groups/163266214168433/?multi_permalinks=510108426150875
-                // https://www.facebook.com/CyprusMail/ (pinned post)
-                topOnly = Dom.roles("feed") == 2 && Dom.roles("grid") == 1 && Dom.roles("contentinfo") == 0;
-            }
-
-            if (topOnly) {
-                Global.log(EXPANDING + "Topmost post");
-                this.rootNode = divv.parentNode;
-                return true;
-            }
-        }
-
-        let check = [];
-        check.push([FS_ARTICLE, "Full browser"]);
-        check.push([ROLE_MAIN, "Main content area"]);
-
-        check.find(item => {
-            const divs = Dom.filterHidden(document.querySelectorAll(item[0]));
-            let div = null;
-            if (divs.length > 0) {
-                // probably insane
-                div = divs[0];
-            }
-
-            if (!!div) {
-                Global.log(EXPANDING + item[1]);
-                this.rootNode = div;
-                return true;
-            }
-        });
-
+      if (topOnly)
+      {
+        Global.log(EXPANDING + "Topmost post");
+        this.rootNode = divv.parentNode;
         return true;
+      }
     }
 
-    getRoot() {
-        return this.rootNode;
-    }
+    let check = [];
 
-    getResponseCount() {
-        return getResponseCount(this.rootNode);
-    }
+    check.push([FS_ARTICLE, "Full browser"]);
+    check.push([ROLE_MAIN, "Main content area"]);
+    check.find(
+      item=>
+      {
+        const divs = Dom.filterHidden(document.querySelectorAll(item[0]));
 
-    getContentSize() {
-        let result = this.rootNode.scrollHeight;
-        result += this.getResponseCount();
-        return result;
-    }
+        let div = null;
 
-    countPosts() {
-        let result = this.rootNode.parentNode.querySelectorAll(ANY_ARTICLE).length;
-        if (result == 0 && this.rootNode.parentNode.querySelectorAll(ROLE_MAIN).length > 0) {
-            result = 1;
+        if (divs.length > 0)
+          div = divs[0];
+
+        if (!!div)
+        {
+          Global.log(EXPANDING + item[1]);
+          this.rootNode = div;
+          return true;
         }
+      });
 
-        return result;
-    }
+    return true;
+  }
+
+  getRoot()
+  {
+    return this.rootNode;
+  }
+
+  getResponseCount()
+  {
+    return getResponseCount(this.rootNode);
+  }
+
+  getContentSize()
+  {
+    let result = this.rootNode.scrollHeight;
+    result += this.getResponseCount();
+    return result;
+  }
+
+  countPosts()
+  {
+    let result = this.rootNode.parentNode.querySelectorAll(ANY_ARTICLE).length;
+
+    if (result == 0 && this.rootNode.parentNode.querySelectorAll(ROLE_MAIN).length > 0)
+      result = 1;
+
+    return result;
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Dom
+//
+//   Helper functions for interacting with the DOM.
+class Dom
+{
+  static getStyle(node)
+  {
+    return node.ownerDocument.defaultView.getComputedStyle(node, null);
+  }
 
-class Dom {
-    static getStyle(node) {
-        return node.ownerDocument.defaultView.getComputedStyle(node, null);
+  static isHidden(node)
+  {
+    while (node && node.ownerDocument)
+    {
+      if (Dom.getStyle(node)["display"] == "none")
+        return true;
+
+      if (Dom.getStyle(node)["visibility"] == "hidden")
+        return true;
+
+      node = node.parentNode;
     }
 
-    static isHidden(node) {
-        while (node && node.ownerDocument) {
-            if (Dom.getStyle(node)["display"] == "none") {
-                return true;
-            }
+    return false;
+  }
 
-            if (Dom.getStyle(node)["visibility"] == "hidden") {
-                return true;
-            }
+  static filterHidden(nodes)
+  {
+    let result = [];
 
-            node = node.parentNode;
+    if(nodes)
+    {
+      nodes.forEach(
+        item =>
+        {
+          if (!Dom.isHidden(item))
+            result.push(item);
+        });
+    }
+
+    return result;
+  }
+
+  static roles(role)
+  {
+    return Dom.filterHidden(document.querySelectorAll("[role=\"" + role + "\"]")).length;
+  }
+
+  static findFirstVisible(nodes)
+  {
+    if (!nodes)
+      return null;
+
+    let filtered = Dom.filterHidden(nodes);
+
+    return filtered.length >= 1 ? filtered[0] : null;
+  }
+
+  static dumpAncestors(node)
+  {
+    while (node)
+    {
+      let s = node.nodeName;
+
+      if (node.id)
+        s += " id=\"" + node.id + "\"";
+      if (node.className)
+        s += " class=\"" + node.className + "\"";
+      if (Dom.isHidden(node))
+        s += " hidden";
+      if (node.role)
+        s += " role=\"" + node.role + "\"";
+
+      Global.log(s);
+
+      node = node.parentNode;
+    }
+  }
+
+  static upThenDown(node, ancestor, descendant)
+  {
+    const item = node.parentNode.closest(ancestor);
+
+    if (item)
+      return item.querySelector(descendant);
+
+    return null;
+  }
+
+  static childIndex(node)
+  {
+    return [Array.from(node.parentNode.children).indexOf(node), node.parentNode.childElementCount];
+  }
+
+  static hasTextView(s)
+  {
+    const words =
+      [
+        /^View%20/,  // English (en_US and en_GB)
+        /^檢視另/, // Traditional Chinese (zh_TW, zh_HK)
+        /^另%20/,     // Simplified Chinese (zh_CN)
+        /^其他/,    // Simplified Chinese (zh_CN)
+        /^आणखी%20/,  // Marathi (mr_IN)
+        /%20देखें$/,    // Hindi (hi_IN)
+        /%20চাওক$/,  // Assamese (as_IN)
+        /%20দেখুন$/,  // Bengali (bn_IN)
+        /%20ਵੇਖੋ$/,    // Panjabi (pa_IN)
+        /%20જુઓ$/,   // Gujarati (gu_IN)
+        /%20ଦେଖନ୍ତୁ$/,  // Oriya (or_IN)
+        /%20காட்டு$/, // Tamil (ta_IN)
+        /%20వీక్షించండి$/, // Telugu (te_IN)
+        /%20ವೀಕ್ಷಿಸಿ$/,    // Kannada (ka_IN)
+        /%20കാണുക$/, // Malayalam (ml_IN)
+        /^Ver%20/,     // Spanish and Portuguese (es_LA, es_ES, pt_BR, pt_PT)
+        /^Afficher%20/, // French (fr_CA, fr_FR)
+        /^عرض%20/,     // Arabic (ar_AR)
+        /^Показать%20/, // Russian (ru_RU)
+        /^Lihat%20/,      // Indonesian (in_ID)
+        /^Tampilkan%20/,  // Indonesian (in_ID)
+        /件を表示$/,        // Japanese (ja_JA, ja_KS)
+        /件を見る$/,        // Japanese
+        /^Преглед%20/,     // Bulgarian (bg_BG)
+        /%20보기$/,         // Korean (ko_KR)
+        /^Visualizza%20/,  // Italian (it_IT)
+        /%20ansehen$/,     // German (de_DE)
+        /^Zobrazit%20/,    // Czech (cs_CZ)
+        /^Vis%20/,         // Danish and Norwegian/bokmål (da_DK, nb_NO)
+        /^Sjå%20/,         // Norwegian/nynorsk (nn_NO)
+        /^Visa%20/,       // Swedish (sv_SE)
+        /^Näytä%20/,      // Finnish (fi_FI)
+        /^Skoða%20/,      // Icelandic (is_IS)
+        /%20weergeven$/,  // Dutch (nl_NL)
+        /%20bekijken$/,   // Dutch (nl_BE)
+        /^Bekijk%20/,     // Dutch (nl_BE)
+        /^Δείτε%20/,      // Greek
+        /^הצג%20/         // Hebrew
+      ];
+
+    return words.some(re => { return s.match(re) != null; });
+  }
+
+  static isTextAllComments(s)
+  {
+    const phrases =
+      [
+        "All comments".toLowerCase(), // English
+        "Semua komentar".toLowerCase(), // Indonesian
+        "Todos os comentários".toLowerCase(), // Portuguese
+        "Všechny komentáře".toLowerCase(), // Czech
+        "Все комментарии".toLowerCase(), // Russian
+        "Όλα τα σχόλια".toLowerCase(), // Greek
+        "すべてのコメント", // Japanese
+        "Tutti i commenti".toLowerCase(), // Italian
+        "כל התגובות".toLowerCase() // Hebrew
+      ];
+      
+    return phrases.indexOf(s.trim().toLowerCase()) >= 0;
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// General Functions
+
+function getResponseCount(item)
+{
+  return item.querySelectorAll(RESPONSE_COUNTER).length;
+}
+
+function ensureCommentsShowing(onDone)
+{
+  let n = Global.root.countPosts();
+
+  if (n > 1)
+    Global.log("Found " + n + " posts");
+
+  // @todo
+  // https://www.facebook.com/photo?fbid=1124898877855180
+  // https://www.facebook.com/125982670754724/videos/372875816621699/
+
+  let filter = [];
+
+  /*
+  Global.root.queryAll(ANY_ARTICLE).forEach(
+    item =>
+    {
+      if (item has hidden comments)
+      {
+        const link = link to show comments;
+
+        if (link)
+          filter.push(link);
+      }
+    });
+  */
+
+  if (filter.length > 0)
+  {
+    Global.log("Showing comment area for " + filter.length + " post(s)");
+    clickAndWait(_NONE, onDone, filter, 0);
+  }
+  else
+  {
+    if (onDone)
+      onDone();
+  }
+}
+
+function clickClass(value, onDone)
+{
+  if (Global.escHandler.shouldAbort())
+  {
+    if (onDone)
+      onDone();
+    return;
+  }
+
+  let filter = Array.from(Global.root.queryAll(value)).filter(
+    item =>
+    {
+      if (value === SEE_MORE_BASE)
+      {
+        if (item.closest(RESPONSE_COUNTER))
+          return false;
+      }
+
+      if (value === SEE_MORE_COMMENT || value === SEE_MORE_BASE)
+      {
+        // must have no child nodes
+        if (!!item.childElementCount)
+          return false;
+      }
+
+      if (value === SEE_MORE_BASE)
+      {
+        // must be preceded by ellipsis; otherwise See Less, See original, etc.
+
+        // the old way of doing things
+        // https://www.facebook.com/sbsnews/videos/372875816621699/
+        if (item.parentNode.parentNode.previousSibling)
+        {
+          let full = item.parentNode.parentNode.previousSibling.textContent;
+
+          if (full.charCodeAt(full.length - 1) === 8230)
+            return true;
+        }
+
+        // a new way of doing things
+        // https://www.facebook.com/newspaperscom/
+        if (item.previousSibling && item.previousSibling.previousSibling)
+        {
+          let full = item.previousSibling.previousSibling.textContent;
+
+          if (full.charCodeAt(full.length - 1) === 8230)
+            return true;
+        }
+
+        // a new way of doing things
+        // https://www.facebook.com/ManresaRestaurant/
+        if (item.previousSibling && item.previousSibling.previousSibling && item.previousSibling.previousSibling.previousSibling)
+        {
+          let full = item.previousSibling.previousSibling.previousSibling.textContent;
+          if (full.charCodeAt(full.length - 1) === 8230)
+            return true;
         }
 
         return false;
-    }
+      }
 
-    static filterHidden(nodes) {
-        let result = [];
-        if (nodes) {
-            nodes.forEach(item => {
-                if (!Dom.isHidden(item)) {
-                    result.push(item);
-                }
-            });
-        }
-
-        return result;
-    }
-
-    static roles(role) {
-        return Dom.filterHidden(document.querySelectorAll("[role=\"" + role + "\"]")).length;
-    }
-
-    static findFirstVisible(nodes) {
-        if (!nodes) {
-            return null;
-        }
-
-        let filtered = Dom.filterHidden(nodes);
-        return filtered.length >= 1 ? filtered[0] : null;
-    }
-
-    static dumpAncestors(node) {
-        while (node) {
-            let s = node.nodeName;
-            if (node.id) {
-                s += " id=\"" + node.id + "\"";
-            }
-
-            if (node.className) {
-                s += " class=\"" + node.className + "\"";
-            }
-
-            if (Dom.isHidden(node)) {
-                s += " hidden";
-            }
-
-            if (node.role) {
-                s += " role=\"" + node.role + "\"";
-            }
-
-            Global.log(s);
-            node = node.parentNode;
-        }
-    }
-
-    static upThenDown(node, ancestor, descendant) {
-        const item = node.parentNode.closest(ancestor);
-        if (item) {
-            return item.querySelector(descendant);
-        }
-
-        return null;
-    }
-
-    static childIndex(node) {
-        return [Array.from(node.parentNode.children).indexOf(node), node.parentNode.childElementCount];
-    }
-
-    static hasTextView(s) {
-        const words = [
-            /^View%20/,  // English (en_US and en_GB)
-            /^檢視另/, // Traditional Chinese (zh_TW, zh_HK)
-            /^另%20/,     // Simplified Chinese (zh_CN)
-            /^其他/,    // Simplified Chinese (zh_CN)
-            /^आणखी%20/,  // Marathi (mr_IN)
-            /%20देखें$/,    // Hindi (hi_IN)
-            /%20চাওক$/,  // Assamese (as_IN)
-            /%20দেখুন$/,  // Bengali (bn_IN)
-            /%20ਵੇਖੋ$/,    // Panjabi (pa_IN)
-            /%20જુઓ$/,   // Gujarati (gu_IN)
-            /%20ଦେଖନ୍ତୁ$/,  // Oriya (or_IN)
-            /%20காட்டு$/, // Tamil (ta_IN)
-            /%20వీక్షించండి$/, // Telugu (te_IN)
-            /%20ವೀಕ್ಷಿಸಿ$/,    // Kannada (ka_IN)
-            /%20കാണുക$/, // Malayalam (ml_IN)
-            /^Ver%20/,     // Spanish and Portuguese (es_LA, es_ES, pt_BR, pt_PT)
-            /^Afficher%20/, // French (fr_CA, fr_FR)
-            /^عرض%20/,     // Arabic (ar_AR)
-            /^Показать%20/, // Russian (ru_RU)
-            /^Lihat%20/,      // Indonesian (in_ID)
-            /^Tampilkan%20/,  // Indonesian (in_ID)
-            /件を表示$/,        // Japanese (ja_JA, ja_KS)
-            /件を見る$/,        // Japanese
-            /^Преглед%20/,     // Bulgarian (bg_BG)
-            /%20보기$/,         // Korean (ko_KR)
-            /^Visualizza%20/,  // Italian (it_IT)
-            /%20ansehen$/,     // German (de_DE)
-            /^Zobrazit%20/,    // Czech (cs_CZ)
-            /^Vis%20/,         // Danish and Norwegian/bokmål (da_DK, nb_NO)
-            /^Sjå%20/,         // Norwegian/nynorsk (nn_NO)
-            /^Visa%20/,       // Swedish (sv_SE)
-            /^Näytä%20/,      // Finnish (fi_FI)
-            /^Skoða%20/,      // Icelandic (is_IS)
-            /%20weergeven$/,  // Dutch (nl_NL)
-            /%20bekijken$/,   // Dutch (nl_BE)
-            /^Bekijk%20/,     // Dutch (nl_BE)
-            /^Δείτε%20/,      // Greek
-            /^הצג%20/         // Hebrew
-        ];
-
-        return words.some(re => { return s.match(re) != null; });
-    }
-
-    static isTextAllComments(s) {
-        const phrases = [
-            "All comments".toLowerCase(), // English
-            "Semua komentar".toLowerCase(), // Indonesian
-            "Todos os comentários".toLowerCase(), // Portuguese
-            "Všechny komentáře".toLowerCase(), // Czech
-            "Все комментарии".toLowerCase(), // Russian
-            "Όλα τα σχόλια".toLowerCase(), // Greek
-            "すべてのコメント", // Japanese
-            "Tutti i commenti".toLowerCase(), // Italian
-            "כל התגובות".toLowerCase() // Hebrew
-        ];
-
-        return phrases.indexOf(s.trim().toLowerCase()) >= 0;
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// general
-
-function getResponseCount(item) {
-    return item.querySelectorAll(RESPONSE_COUNTER).length;
-}
-
-function ensureCommentsShowing(onDone) {
-    let n = Global.root.countPosts();
-    if (n > 1) {
-        Global.log("Found " + n + " posts");
-    }
-
-    // @todo
-    // https://www.facebook.com/photo?fbid=1124898877855180
-    // https://www.facebook.com/125982670754724/videos/372875816621699/
-    let filter = [];
-/*
-    Global.root.queryAll(ANY_ARTICLE).forEach(item => {
-        if (item has hidden comments) {
-            const link = link to show comments;
-            if (link) {
-                filter.push(link);
-            }
-        }
-    });
-*/
-    if (filter.length > 0) {
-        Global.log("Showing comment area for " + filter.length + " post(s)");
-        clickAndWait(_NONE, onDone, filter, 0);
-    } else {
-        if (onDone) onDone();
-    }
-}
-
-function clickClass(value, onDone) {
-    if (Global.escHandler.shouldAbort()) {
-        if (onDone) onDone();
-        return;
-    }
-
-    let filter = Array.from(Global.root.queryAll(value)).filter(item => {
-        if (value === SEE_MORE_BASE) {
-            if (item.closest(RESPONSE_COUNTER)) {
-                return false;
-            }
-        }
-
-        if (value === SEE_MORE_COMMENT || value === SEE_MORE_BASE) {
-            // must have no child nodes
-            if (!!item.childElementCount) {
-                return false;
-            }
-        }
-
-        if (value === SEE_MORE_BASE) {
-            // must be preceded by ellipsis; otherwise See Less, See original, etc.
-
-            // the old way of doing things
-            // https://www.facebook.com/sbsnews/videos/372875816621699/
-            if (item.parentNode.parentNode.previousSibling) {
-                let full = item.parentNode.parentNode.previousSibling.textContent;
-                if (full.charCodeAt(full.length - 1) === 8230) {
-                    return true;
-                }
-            }
-
-            // a new way of doing things
-            // https://www.facebook.com/newspaperscom/
-            if (item.previousSibling && item.previousSibling.previousSibling) {
-                let full = item.previousSibling.previousSibling.textContent;
-                if (full.charCodeAt(full.length - 1) === 8230) {
-                    return true;
-                }
-            }
-
-            // a new way of doing things
-            // https://www.facebook.com/ManresaRestaurant/
-            if (item.previousSibling && item.previousSibling.previousSibling && item.previousSibling.previousSibling.previousSibling) {
-                let full = item.previousSibling.previousSibling.previousSibling.textContent;
-                if (full.charCodeAt(full.length - 1) === 8230) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
+      return true;
     });
 
-    if (filter.length > 0) {
-        clickAndWait(value, onDone, filter, 0);
-    } else {
-        if (onDone) onDone();
-    }
+  if (filter.length > 0)
+    clickAndWait(value, onDone, filter, 0);
+  else if (onDone)
+    onDone();
 
-    return filter.length;
+  return filter.length;
 }
 
-function doNotWait(value) {
-    return [ SEE_MORE_COMMENT,
-             SEE_MORE_BASE
-           ].indexOf(value) >= 0;
+function doNotWait(value)
+{
+  return [SEE_MORE_COMMENT, SEE_MORE_BASE].indexOf(value) >= 0;
 }
 
-function getCommentsOrReplies(comments, onDone) {
-    if (Global.escHandler.shouldAbort()) {
-        if (onDone) onDone();
-        return;
-    }
+function getCommentsOrReplies(comments, onDone)
+{
+  if (Global.escHandler.shouldAbort())
+  {
+    if (onDone)
+      onDone();
 
-    let filter = Array.from(Global.root.queryAll(GET_CONTENT));
-    if (filter.length > 0) {
-        if (comments) {
-            filter = Array.from(Global.root.queryAll(GET_COMMENTS));
-            // https://www.facebook.com/groups/AnalfabetiDellaBirra/permalink/2080384488695788/
-            filter = filter.filter(item => !item.parentNode.closest("li"));
-       } else {
-            // avoid collapse / hide toggle
-            filter = filter.filter(function(item) {
-                // if nested, keep it (it's not Hide)
-                if (!!item.closest("ul") && !!item.closest("ul").parentNode.closest("ul")) {
-                    // https://www.facebook.com/groups/297274457043228/posts/2696675147103135/
-                    return true;
-                }
-
-                // if link is first child, and has siblings, it's Hide position
-                let x = Dom.childIndex(item.parentNode);
-                let skip = x[0] == 0 && x[1] != 1;
-
-                // this one's different:
-                // https://www.facebook.com/MarjorieTaylorGreene/posts/2547514125538682
-                if (!skip) {
-                    skip = x[0] == 2 && x[1] == 3;
-                }
-
-                // override?
-                if (skip) {
-                    skip = !Dom.hasTextView(item.textContent);
-                }
-
-                return !skip;
-            });
-        }
+    return;
   }
 
-    if (filter.length > 0) {
-        clickAndWait(comments ? _COMMENTS : _REPLIES, onDone, filter, 0);
-    } else {
-        if (onDone) onDone();
+  let filter = Array.from(Global.root.queryAll(GET_CONTENT));
+
+  if (filter.length > 0)
+  {
+    if (comments)
+    {
+      filter = Array.from(Global.root.queryAll(GET_COMMENTS));
+      // https://www.facebook.com/groups/AnalfabetiDellaBirra/permalink/2080384488695788/
+      filter = filter.filter(item => !item.parentNode.closest("li"));
     }
+    else
+    {
+      // avoid collapse / hide toggle
+      filter = filter.filter(
+        function (item)
+        {
+          // if nested, keep it (it's not Hide)
+          // https://www.facebook.com/groups/297274457043228/posts/2696675147103135/
+          if (!!item.closest("ul") && !!item.closest("ul").parentNode.closest("ul"))
+            return true;
+
+          // if link is first child, and has siblings, it's Hide position
+          let x = Dom.childIndex(item.parentNode);
+
+          let skip = x[0] == 0 && x[1] != 1;
+
+          // this one's different:
+          // https://www.facebook.com/MarjorieTaylorGreene/posts/2547514125538682
+          if (!skip)
+            skip = x[0] == 2 && x[1] == 3;
+
+          // override?
+          if (skip)
+            skip = !Dom.hasTextView(item.textContent);
+
+          return !skip;
+        });
+    }
+  }
+
+  if (filter.length > 0)
+  {
+    clickAndWait(comments ? _COMMENTS : _REPLIES, onDone, filter, 0);
+  }
+  else if (onDone)
+    onDone();
 }
 
-function getBestLabel(link) {
-    let label = link.getAttribute("aria-label");
+function getBestLabel(link)
+{
+  let label = link.getAttribute("aria-label");
 
-    if (!label) {
-        label = link.textContent;
-    }
+  if (!label)
+    label = link.textContent;
 
-    // chop off some extra stuff if present
-    label = label.split("\u00a0\u0020\u00b7")[0];
-    label = label.split("\u0020\u00b7")[0];
+  // chop off some extra stuff if present
+  label = label.split("\u00a0\u0020\u00b7")[0];
+  label = label.split("\u0020\u00b7")[0];
 
-    return label;
+  return label;
 }
 
-function clickAndWait(value, onDone, links, i) {
-    if (Global.escHandler.shouldAbort()) {
-        if (onDone) onDone();
-        return;
-    }
+function clickAndWait(value, onDone, links, i)
+{
+  if (Global.escHandler.shouldAbort())
+  {
+    if (onDone)
+      onDone();
 
-    // do this before clicking
-    let n = Global.root.getContentSize();
+    return;
+  }
 
-    Global.log("click (" + (links.length - i - 1) + " left): " + getBestLabel(links[i]));
-    links[i].click();
+  // do this before clicking
+  let n = Global.root.getContentSize();
 
-    if (value == _NONE) {
-        n = Global.root.getContentSize();
-    }
+  Global.log("click (" + (links.length - i - 1) + " left): " + getBestLabel(links[i]));
 
-    let wait = MAX_WAIT;
-    let time = WAIT_TIME;
-    if (doNotWait(value)) {
-        wait = -1;
-        time = 0;
-    }
+  links[i].click();
 
-    window.setTimeout(() => waitHelper(value, onDone, links, i, n, wait), time);
+  if (value == _NONE)
+    n = Global.root.getContentSize();
+
+  let wait = MAX_WAIT;
+  let time = WAIT_TIME;
+
+  if (doNotWait(value))
+  {
+    wait = -1;
+    time = 0;
+  }
+
+  window.setTimeout(() => waitHelper(value, onDone, links, i, n, wait), time);
 }
 
-function waitHelper(value, onDone, links, i, n, wait) {
-    if (wait === -1) {
-        if (++i < links.length) {
-            clickAndWait(value, onDone, links, i);
-        } else {
-            if (onDone) onDone();
-        }
+function waitHelper(value, onDone, links, i, n, wait)
+{
+  if (wait === -1)
+  {
+    if (++i < links.length)
+      clickAndWait(value, onDone, links, i);
+    else if (onDone)
+      onDone();
 
-        return;
+    return;
+  }
+
+  if (Global.root.getContentSize() - n != 0)
+  {
+    if (++i < links.length)
+      clickAndWait(value, onDone, links, i);
+    else
+    {
+      // new content may contain more of what we were asked to look for
+      if (value == _COMMENTS || value == _REPLIES)
+        getCommentsOrReplies(value == _COMMENTS, onDone);
+      else if (onDone)
+        onDone();
     }
 
-    if (Global.root.getContentSize() - n != 0) {
-        if (++i < links.length) {
-            clickAndWait(value, onDone, links, i);
-        } else {
-            // new content may contain more of what we were asked to look for
-            if (value == _COMMENTS || value == _REPLIES) {
-                getCommentsOrReplies(value == _COMMENTS, onDone);
-            } else {
-                if (onDone) onDone();
-            }
-        }
+    return;
+  }
 
-        return;
-    }
+  if (window.doPhantomCheck && !Global.root.getRoot().contains(links[i]))
+  {
+    Global.logger.phantom();
+    wait = -1;
+  }
 
-    if (window.doPhantomCheck && !Global.root.getRoot().contains(links[i])) {
-        Global.logger.phantom();
-        wait = -1;
-    }
+  // avoid looping forever
+  if (wait > 0)
+  {
+    window.setTimeout(() => waitHelper(value, onDone, links, i, n, --wait), WAIT_TIME);
+    return;
+  }
 
-    // avoid looping forever
-    if (wait > 0) {
-        window.setTimeout(() => waitHelper(value, onDone, links, i, n, --wait), WAIT_TIME);
-        return;
-    }
+  if (wait == 0)
+  {
+    Global.logger.timeout();
+  }
 
-    if (wait == 0) {
-        Global.logger.timeout();
-    }
-
-    if (++i < links.length) {
-        clickAndWait(value, onDone, links, i);
-    } else {
-        if (onDone) onDone();
-    }
+  if (++i < links.length)
+    clickAndWait(value, onDone, links, i);
+  else if (onDone)
+    onDone();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// pumping (iteratively getting comments and replies)
+// Pumping (iteratively getting comments and replies)
 
-function pumpOnce(onDone) {
-    window.responseCount = Global.root.getResponseCount();
-    window.doPhantomCheck = true;
-    if ((todo & EXPAND_COMMENTS) != 0) {
-        getCommentsOrReplies(true, () => pumpOnce2(onDone));
-    } else {
-        pumpOnce2(onDone);
-    }
+function pumpOnce(onDone)
+{
+  window.responseCount = Global.root.getResponseCount();
+  window.doPhantomCheck = true;
+
+  if ((todo & EXPAND_COMMENTS) != 0)
+    getCommentsOrReplies(true, () => pumpOnce2(onDone));
+  else
+    pumpOnce2(onDone);
 }
 
-function pumpOnce2(onDone) {
-    if ((todo & EXPAND_REPLIES) != 0) {
-        getCommentsOrReplies(false, () => pumpOnce3(onDone));
-    } else {
-        pumpOnce3(onDone);
-    }
+function pumpOnce2(onDone)
+{
+  if ((todo & EXPAND_REPLIES) != 0)
+    getCommentsOrReplies(false, () => pumpOnce3(onDone));
+  else
+    pumpOnce3(onDone);
 }
 
-function pumpOnce3(onDone) {
-    if (Global.root.getResponseCount() > window.responseCount) {
-        window.setTimeout(() => pumpOnce(onDone), 500);
-    } else {
-        delete window.doPhantomCheck;
-        if (onDone) onDone();
-    }
+function pumpOnce3(onDone)
+{
+  if (Global.root.getResponseCount() > window.responseCount)
+    window.setTimeout(() => pumpOnce(onDone), 500);
+  else
+  {
+    delete window.doPhantomCheck;
+    if (onDone)
+      onDone();
+  }
 }
 
+ 
 ///////////////////////////////////////////////////////////////////////////////
 // Comment filters
 
-function setFilter(onDone) {
-    window.filters = Array.from(Global.root.queryAll(FILTER));
-    if (window.filters.length > Global.root.countPosts()) {
-        Global.log("Something went wrong");
-        Global.log("Not checking " + window.filters.length + " filter(s)");
-        Global.log("countPosts " + Global.root.countPosts());
-        if (onDone) onDone();
-        return;
-    }
+function setFilter(onDone)
+{
+  window.filters = Array.from(Global.root.queryAll(FILTER));
 
-    window.filters_i = 0;
-    window.filters_onDone = onDone;
-    if (window.filters.length > 0) {
-        Global.log("Checking " + window.filters.length + " filter(s)");
-    }
+  if (window.filters.length > Global.root.countPosts())
+  {
+    Global.log("Something went wrong");
+    Global.log("Not checking " + window.filters.length + " filter(s)");
+    Global.log("countPosts " + Global.root.countPosts());
 
-    filterOne();
+    if (onDone)
+      onDone();
+
+    return;
+  }
+
+  window.filters_i = 0;
+  window.filters_onDone = onDone;
+
+  if (window.filters.length > 0)
+    Global.log("Checking " + window.filters.length + " filter(s)");
+
+  filterOne();
 }
 
-function filterOne() {
-    if (window.filters_i < window.filters.length) {
-        const link = window.filters[window.filters_i++];
-        if (Dom.isTextAllComments(link.textContent)) {
-            filterOne();
-        } else {
-            link.click();
-            window.setTimeout(() => setFilter2(link), 100);
-        }
-
-        return;
+function filterOne()
+{
+  if (window.filters_i < window.filters.length)
+  {
+    const link = window.filters[window.filters_i++];
+    if (Dom.isTextAllComments(link.textContent))
+      filterOne();
+    else
+    {
+      link.click();
+      window.setTimeout(() => setFilter2(link), 100);
     }
 
-    if (window.filters_onDone) window.filters_onDone();
+    return;
+  }
+
+  if (window.filters_onDone)
+    window.filters_onDone();
 }
 
-function setFilter2(link) {
-    // look for menu items
-    let filter = Array.from(document.querySelectorAll(FILTER_MENU));
-    if (filter.length == 1) {
-        const menus = filter[0].querySelectorAll(FILTER_ITEM);
-        let found = false;
-        for (var i = 0; i < menus.length; i++) {
-            const s = menus[i].querySelector(FILTER_ITEM_INNER);
-            if (s && Dom.isTextAllComments(s.textContent)) {
-                found = true;
-                break;
-            }
-        }
+function setFilter2(link)
+{
+  // look for menu items
+  let filter = Array.from(document.querySelectorAll(FILTER_MENU));
 
-        if (!found) {
-            Global.log(window.filters_i + ": \u0027" + "All comments" + "\u0027 not found.");
-            // the menu cannot be closed using the DOM (click, focus),
-            // so we just blank it out
-            menus[0].closest(FILTER_MENU).outerHTML = "";
-        } else {
-            const span = menus[i].querySelector(FILTER_ITEM_INNER);
-            let text = "";
-            if (!!span) {
-                text = span.textContent;
-            }
+  if (filter.length == 1)
+  {
+    const menus = filter[0].querySelectorAll(FILTER_ITEM);
 
-            if (text.trim() != link.textContent.trim()) {
-                Global.log(window.filters_i + ": changing \u0027" + link.textContent.trim() + "\u0027 to \u0027" + text.trim() + "\u0027");
-                // clicking makes the link go away, so use link before clicking
-                let post = link.closest(ANY_ARTICLE);
-                if (!post) {
-                    post = link.closest(ROLE_MAIN);
-                }
+    let found = false;
 
-                menus[i].click();
-                window.setTimeout(() => setFilter3(post), 100);
-                return;
-            }
-        }
-    } else if (filter.length > 1) {
-        Global.log("Comment filter failure! (" + filter.length + ")");
-    } else if (filter.length === 0) {
-        Global.log(window.filters_i + ": \u0027" + "All comments" + "\u0027 not found. (b)");
+    for (var i = 0; i < menus.length; i++)
+    {
+      const s = menus[i].querySelector(FILTER_ITEM_INNER);
+
+      if (s && Dom.isTextAllComments(s.textContent))
+      {
+        found = true;
+        break;
+      }
     }
 
-    // this could mean we blanked the menu last time (see above)
-    // or it could mean menu has not been generated in time.
-    // could retry instead, with timeouts
-    filterOne();
-}
+    if (!found)
+    {
+      Global.log(window.filters_i + ": \u0027" + "All comments" + "\u0027 not found.");
 
-function setFilter3(post) {
-    if (!post) {
-        Global.log("Something went wrong. Not waiting.");
+      // the menu cannot be closed using the DOM (click, focus),
+      // so we just blank it out
+      menus[0].closest(FILTER_MENU).outerHTML = "";
     }
+    else
+    {
+      const span = menus[i].querySelector(FILTER_ITEM_INNER);
 
-    if (!post || !!post.querySelector(FILTER)) {
-        filterOne();
-    } else {
+      let text = "";
+
+      if (!!span)
+        text = span.textContent;
+
+      if (text.trim() != link.textContent.trim())
+      {
+        Global.log(window.filters_i + ": changing \u0027" + link.textContent.trim() + "\u0027 to \u0027" + text.trim() + "\u0027");
+
+        // clicking makes the link go away, so use link before clicking
+        let post = link.closest(ANY_ARTICLE);
+
+        if (!post)
+          post = link.closest(ROLE_MAIN);
+
+        menus[i].click();
+
         window.setTimeout(() => setFilter3(post), 100);
+
+        return;
+      }
     }
+  }
+  else if (filter.length > 1)
+    Global.log("Comment filter failure! (" + filter.length + ")");
+  else if (filter.length === 0)
+    Global.log(window.filters_i + ": \u0027" + "All comments" + "\u0027 not found. (b)");
+
+  // this could mean we blanked the menu last time (see above)
+  // or it could mean menu has not been generated in time.
+  // could retry instead, with timeouts
+  filterOne();
+}
+
+function setFilter3(post)
+{
+  if (!post)
+    Global.log("Something went wrong. Not waiting.");
+
+  if (!post || !!post.querySelector(FILTER))
+    filterOne();
+  else
+    window.setTimeout(() => setFilter3(post), 100);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Actions
+//
+//   Scheduler for the sequence of expansion actions
+class Actions
+{
+  constructor()
+  {
+    this.i = 0;
+    this.setUpActions();
+  }
 
-class Actions {
-    constructor() {
-        this.i = 0;
-        this.setUpActions();
+  setUpActions()
+  {
+    this.actions = [];
+    this.actions.push(onDone => ensureCommentsShowing(onDone));
+
+    if ((todo & EXPAND_FILTER) == 0)
+      this.actions.push(onDone => setFilter(onDone));
+
+    // see special case(s) in clickClass()
+    this.actions.push(onDone => clickClass(SEE_MORE_BASE, onDone));
+
+    function seeMore(o)
+    {
+      // see special case(s) in clickClass()
+      o.actions.push(onDone => clickClass(SEE_MORE_COMMENT, onDone));
     }
 
-    setUpActions() {
-        this.actions = [];
+    seeMore(this);
 
-        this.actions.push(onDone => ensureCommentsShowing(onDone));
+    this.actions.push(onDone => pumpOnce(onDone));
 
-        if ((todo & EXPAND_FILTER) == 0) {
-            this.actions.push(onDone => setFilter(onDone));
-        }
+    seeMore(this);
 
-        // see special case(s) in clickClass()
-        this.actions.push(onDone => clickClass(SEE_MORE_BASE, onDone));
+    this.actions.push(Session.endSession);
+    this.actions.push(null);
+  }
 
-        function seeMore(o) {
-            // see special case(s) in clickClass()
-            o.actions.push(onDone => clickClass(SEE_MORE_COMMENT, onDone));
-        }
-
-        seeMore(this);
-        this.actions.push(onDone => pumpOnce(onDone));
-        seeMore(this);
-
-        this.actions.push(Session.endSession);
-        this.actions.push(null);
+  doAction()
+  {
+    if (this.actions[this.i] !== null)
+    {
+      this.actions[this.i](() => window.setTimeout(bind(this, this.doAction), 50));
+      this.i++;
     }
+  }
 
-    doAction() {
-        if (this.actions[this.i] !== null) {
-            this.actions[this.i](() => window.setTimeout(bind(this, this.doAction), 50));
-            this.i++;
-        }
-    }
-
-    kickOff() {
-        this.i = 0;
-        this.doAction();
-    }
+  kickOff()
+  {
+    this.i = 0;
+    this.doAction();
+  }
 }
-
+ 
 ///////////////////////////////////////////////////////////////////////////////
 // Session
+//
+//   Tracks the overall integration.
+class Session
+{
+  static init()
+  {
+    if (window.Global)
+    {
+      Global = window.Global;
+      Global.escHandler.abort(true);
+    }
+    else
+      Session.kickOff();
+  }
 
-class Session {
-    static init() {
-        if (window.Global) {
-            Global = window.Global;
-            Global.escHandler.abort(true);
-        } else {
-            Session.kickOff();
-        }
+  static kickOff()
+  {
+    Global =
+      {
+        escHandler: new EscHandler(),
+        cfgHandler: new CfgHandler(),
+        logger: new LogWindow(),
+        root: new Root()
+      };
+
+    Global.log =
+      function (s)
+      {
+        Global.logger.log(s);
+      };
+
+    window.Global=Global;
+
+    Session.main();
+  }
+
+  static main()
+  {
+    todo = Settings.getInt(SETTINGS_KEY, todo);
+
+    Global.logger.show();
+    Global.escHandler.on();
+    Global.cfgHandler.on();
+
+    Root.removeOverlay();
+
+    if (Global.root.determine())
+    {
+      Global.actions = new Actions();
+      Global.actions.kickOff();
+    }
+    else
+      Session.endSession();
+  }
+
+  static endSession()
+  {
+    Global.logger.counts();
+
+    if (Global.cfgHandler.shouldConfig())
+    {
+      CfgWindow.showIt();
+      return;
     }
 
-    static kickOff() {
-        Global = {
-            escHandler: new EscHandler(),
-            cfgHandler: new CfgHandler(),
-            logger: new LogWindow(),
-            root: new Root()
-        };
+    Global.ending = true;
+    Global.log("[Press \u0027s\u0027 now for Settings]");
 
-        Global.log = function(s) {
-            Global.logger.log(s);
-        };
+    window.setTimeout(Session.maybeEnd, END_DELAY * 1000);
+  }
 
-        window.Global = Global;
-        Session.main();
+  static maybeEnd()
+  {
+    delete Global.ending;
+
+    if (!Global.cfgHandler.shouldConfig())
+      Session.trulyEnd();
+  }
+
+  static trulyEnd()
+  {
+    if (Global.cfg)
+    {
+      Global.cfg.hide();
+      delete Global.cfg;
     }
 
-    static main() {
-        todo = Settings.getInt(SETTINGS_KEY, todo);
+    Global.escHandler.off();
+    Global.cfgHandler.off();
+    Global.logger.hide();
 
-        Global.logger.show();
-        Global.escHandler.on();
-        Global.cfgHandler.on();
-        Root.removeOverlay();
-        if (Global.root.determine()) {
-            Global.actions = new Actions();
-            Global.actions.kickOff();
-        } else {
-            Session.endSession();
-        }
-    }
+    delete window.Global;
 
-    static endSession() {
-        Global.logger.counts();
-        if (Global.cfgHandler.shouldConfig()) {
-            CfgWindow.showIt();
-            return;
-        }
-
-        Global.ending = true;
-        Global.log("[Press \u0027s\u0027 now for Settings]");
-        window.setTimeout(Session.maybeEnd, END_DELAY * 1000);
-    }
-
-    static maybeEnd() {
-        delete Global.ending;
-        if (!Global.cfgHandler.shouldConfig()) {
-            Session.trulyEnd();
-        }
-    }
-
-    static trulyEnd() {
-        if (Global.cfg) {
-            Global.cfg.hide();
-            delete Global.cfg;
-        }
-
-        Global.escHandler.off();
-        Global.cfgHandler.off();
-        Global.logger.hide();
-        delete window.Global;
-        Global = null;
-    }
+    Global = null;
+  }
 }
 
 Session.init();
