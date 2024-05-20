@@ -12,6 +12,10 @@ You can also use `ExpandAll-bookmarklet-debug.js`, which preserves the names of 
 
 In an open Facebook tab showing the comment thread in question, click on the bookmark created during installation. This should temporarily pop up a small blue overlay that provides a running status update as to what it is doing. When it has finished, the overlay disappears after a short delay.
 
+## Updating
+
+To install a newer version of the bookmarklet, you can simply delete and recreate the bookmark, but you can also edit the bookmark and copy/paste the bookmarklet URL from the build output into the "URL" field of the bookmark.
+
 ## Building
 
 The source code in the repository is fully-expanded for ease of reading & manipulation, but this would result in an exceedingly large bookmarklet URL. As such, the project is supplied with a `Makefile` which uses `uglify-js` to minify & compress the code as much as possible, turning it into a single line in the process.
