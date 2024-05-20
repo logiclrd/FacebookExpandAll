@@ -41,7 +41,8 @@ const CSS_LOGIN_STUFF = "._5hn6,[data-nosnippet]";
 const SM_COMMENT = "[dir=\"auto\"] [role=\"button\"]";
 const SEE_MORE_COMMENT = RESPONSE_COUNTER + " " + SM_COMMENT;
 
-const EXPAND_COMMENT = ".xmgb6t1";
+const DELETED_COMMENT_NOTICE = ".x1m6arcz";
+const EXPAND_COMMENT = ".xmgb6t1:not(" + DELETED_COMMENT_NOTICE + ")";
 const SM_BASE = "div.x1s688f.xt0b8zv";
 const SEE_MORE_BASE = POST_ARTICLE + " " + SM_BASE + "," + FS_ARTICLE + " " + SM_BASE;
 
