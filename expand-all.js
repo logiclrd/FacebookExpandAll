@@ -797,11 +797,8 @@ function ensureCommentsShowing(onDone)
     Global.log("Showing comment area for " + filter.length + " post(s)");
     clickAndWait(_NONE, onDone, filter, 0);
   }
-  else
-  {
-    if (onDone)
-      onDone();
-  }
+  else if (onDone)
+    onDone();
 }
 
 function clickClass(value, onDone)
@@ -1227,31 +1224,38 @@ class Actions
 
     this.actions.push(onDone => pumpOnce(onDone));
 
-    this.actions.push(onDone => this.setUpMoreActions());
+    this.actions.push(onDone => this.setUpMoreActions(onDone));
   }
 
-  setUpMoreActions()
+  setUpMoreActions(onDone)
   {
+    if (Global.escHandler.shouldAbort())
+      {
+        if (onDone)
+          onDone();
+        return;
+      }
+
     var moreActions = false;
 
     if (Global.root.queryAll(SEE_MORE_COMMENT).length > 0)
     {
       // see special case(s) in clickClass()
-      this.actions.push(onDone => clickClass(SEE_MORE_COMMENT,onDone));
+      this.actions.push(onDone => clickClass(SEE_MORE_COMMENT, onDone));
       moreActions = true;
     }
 
     if (Global.root.queryAll(EXPAND_COMMENT).length > 0)
     {
       // see special case(s) in clickClass()
-      this.actions.push(onDone => clickClass(EXPAND_COMMENT,onDone));
+      this.actions.push(onDone => clickClass(EXPAND_COMMENT, onDone));
       moreActions = true;
     }
 
     if (moreActions)
     {
       Global.log("found more work to do!");
-      this.actions.push(onDone => this.setUpMoreActions());
+      this.actions.push(onDone => this.setUpMoreActions(onDone));
     }
     else
     {
@@ -1259,9 +1263,8 @@ class Actions
       this.actions.push(null);
     }
 
-    this.i++;
-
-    this.doAction();
+    if (onDone)
+      onDone();
   }
 
   doAction()
