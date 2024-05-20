@@ -54,7 +54,7 @@ const SETTINGS_KEY = "expand-all-todo";
 function bind(obj, fn)
 {
   return (
-    function()
+    function bindProxy()
     {
       fn.apply(obj, arguments);
     });
